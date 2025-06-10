@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Speech Recognition</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            text-align: center;
+            background-color: #f4f4f4;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        select, button {
+            font-size: 1rem;
+            padding: 10px;
+            margin: 10px 5px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #result {
+            font-size: 1.2rem;
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h2>🎙️ Live Speech Recognition (Whisper)</h2>
+
+    <label for="language">Language:</label>
+    <select id="language">
+        <option value="">🌍 Auto Detect</option>
+        {% for code, name in languages.items() %}
+            <option value="{{ code }}">{{ name }}</option>
+        {% endfor %}
+    </select>
+
+    <div>
+        <button onclick="startRecording()">▶️ Start</button>
+        <button onclick="stopRecording()">⏹️ Stop</button>
+    </div>
+
+    <p id="result">🎧 Waiting...</p>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'speech.wav');
+                    formData.append('language', document.getElementById('language').value);
+
+                    document.getElementById('result').innerText = '⏳ Transcribing...';
+
+                    try {
+                        const response = await fetch('/transcribe', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const result = await response.json();
+                        document.getElementById('result').innerText = result.transcription
+                            ? `📝 ${result.transcription} (${result.language})`
+                            : `❌ Error: ${result.error}`;
+                    } catch (err) {
+                        document.getElementById('result').innerText = `❌ Network Error`;
+                    }
+                };
+
+                mediaRecorder.start();
+                document.getElementById('result').innerText = '🎙️ Listening...';
+            } catch (err) {
+                document.getElementById('result').innerText = '❌ Microphone access denied';
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+    </script>
+</body>
+</html>
